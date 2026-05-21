@@ -36,7 +36,7 @@ export default function RegisterScreen({ navigation }) {
       });
 
       console.log("Đăng ký thành công!");
-      navigation.navigate('Home'); // Chuyển vào HomeScreen
+      // navigation.navigate('Home'); // Chuyển vào HomeScreen
     } catch (error) {
       Alert.alert("Đăng ký thất bại", error.message);
     }
@@ -54,7 +54,7 @@ export default function RegisterScreen({ navigation }) {
         <View style={styles.content}>
           <View style={styles.brandBadgeRow}>
             <Ionicons name="paw" size={18} color="#000000" />
-            <Text style={styles.brandBadgeText}>RescueFinde</Text>
+            <Text style={styles.brandBadgeText}>Find Frodo</Text>
           </View>
 
           <Text style={styles.title}>Tạo tài khoản</Text>

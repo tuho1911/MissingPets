@@ -18,7 +18,7 @@ export default function LoginScreen({ navigation }) {
     signInWithEmailAndPassword(auth, email, password)
       .then((userCredential) => {
         console.log("Đăng nhập thành công:", userCredential.user.email);
-        navigation.navigate('Home'); // Chuyển vào HomeScreen
+        // navigation.navigate('Home'); // Chuyển vào HomeScreen
       })
       .catch((error) => {
         Alert.alert("Đăng nhập thất bại", error.message);
