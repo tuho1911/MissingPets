@@ -11,6 +11,10 @@ import {
   serverTimestamp, doc, setDoc, updateDoc
 } from 'firebase/firestore';
 
+// Import 2 Component con dùng chung vừa bóc tách xịn sò
+import ChatGroupItem from '../components/ChatGroupItem';
+import MessageBubble from '../components/MessageBubble';
+
 export default function ChatScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef();
@@ -24,26 +28,6 @@ export default function ChatScreen({ route, navigation }) {
   const [activePostImg, setActivePostImg] = useState('');
 
   const targetPost = route?.params?.post || null;
-
-  // 🌟 FIX LỖI THỜI GIAN: Lấy giờ máy nếu server chưa kịp trả về timestamp
-  const formatChatTime = (timestamp) => {
-    if (!timestamp || typeof timestamp.toDate !== 'function') {
-      const now = new Date();
-      return `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    }
-    const date = timestamp.toDate();
-    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-  };
-
-  const formatListTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    const now = new Date();
-    if (date.toDateString() === now.toDateString()) {
-      return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-    }
-    return `${date.getDate()}/${date.getMonth() + 1}`;
-  };
 
   const handleHideChat = (roomItem) => {
     Alert.alert("Xóa hội thoại", "Bạn muốn ẩn cuộc trò chuyện này khỏi danh sách?", [
@@ -61,14 +45,12 @@ export default function ChatScreen({ route, navigation }) {
     ]);
   };
 
-  // Mở phòng chat từ danh sách + 🌟 Xóa cờ chưa đọc (Unread)
   const handleOpenRoom = async (item) => {
     setCurrentRoomId(item.id);
     setActivePartnerName(item.postTitle || 'Hội thoại cứu hộ');
     setActivePostImg(item.postImageUrl || '');
     setViewMode('room');
 
-    // Nếu đối phương là người nhắn cuối và mình chưa đọc, bấm vào sẽ xóa chấm đỏ
     if (item.lastSenderId !== auth.currentUser.uid && item.unread) {
       try {
         await updateDoc(doc(db, 'chats', item.id), { unread: false });
@@ -89,7 +71,6 @@ export default function ChatScreen({ route, navigation }) {
         setActivePostImg(targetPost.imageUrl);
         const roomRef = doc(db, 'chats', roomId);
 
-        // Vào từ trang chi tiết cũng tự động tính là đã đọc phòng này
         setDoc(roomRef, {
           roomId,
           postTitle: targetPost.title,
@@ -135,7 +116,6 @@ export default function ChatScreen({ route, navigation }) {
 
     await addDoc(collection(db, 'chats', currentRoomId, 'messages'), { senderId: auth.currentUser.uid, text: messageText, createdAt: serverTimestamp() });
 
-    // 🌟 THÊM TRƯỜNG BÁO TIN: Lưu lại người gửi cuối và bật cờ unread lên true
     await updateDoc(doc(db, 'chats', currentRoomId), {
       lastMessage: messageText,
       lastUpdated: serverTimestamp(),
@@ -162,32 +142,14 @@ export default function ChatScreen({ route, navigation }) {
               data={chatGroups}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ paddingBottom: 30 }}
-              renderItem={({ item }) => {
-                // 🌟 KIỂM TRA TIN NHẮN CHƯA ĐỌC: Người nhắn cuối không phải mình && cờ unread đang bật
-                const hasUnread = item.unread && item.lastSenderId !== auth.currentUser.uid;
-
-                return (
-                  <View style={styles.chatGroupRow}>
-                    <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} onPress={() => handleOpenRoom(item)}>
-                      <Image source={{ uri: item.postImageUrl || 'https://via.placeholder.com/150' }} style={styles.groupAvatar} />
-                      <View style={styles.groupInfoBlock}>
-                        <View style={styles.groupMetaTitleRow}>
-                          <Text style={[styles.groupTitleText, hasUnread && { fontWeight: '900' }]} numberOfLines={1}>{item.postTitle}</Text>
-                          <Text style={[styles.listTimeText, hasUnread && { color: '#FF3B30', fontWeight: '900' }]}>{formatListTime(item.lastUpdated)}</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Text style={[styles.groupSubText, hasUnread && { color: '#000', fontWeight: '800' }]} numberOfLines={1}>{item.lastMessage}</Text>
-                          {/* 🌟 CHẤM ĐỎ THÔNG BÁO TIN NHẮN MỚI */}
-                          {hasUnread && <View style={styles.unreadDotBadge} />}
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.deleteListBtn} onPress={() => handleHideChat(item)}>
-                      <Ionicons name="trash-outline" size={18} color="#FF3B30" />
-                    </TouchableOpacity>
-                  </View>
-                );
-              }}
+              renderItem={({ item }) => (
+                <ChatGroupItem
+                  item={item}
+                  currentUserId={auth.currentUser?.uid}
+                  onPress={() => handleOpenRoom(item)}
+                  onHide={() => handleHideChat(item)}
+                />
+              )}
             />
           )}
         </View>
@@ -223,19 +185,9 @@ export default function ChatScreen({ route, navigation }) {
               data={messages}
               keyExtractor={(item) => item.id}
               contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12 }}
-              renderItem={({ item }) => {
-                const isMyMsg = item.senderId === auth?.currentUser?.uid;
-                return (
-                  <View style={[styles.messageBubbleRow, isMyMsg ? { justifyContent: 'flex-end' } : { justifyContent: 'flex-start' }]}>
-                    <View style={[styles.baseBubble, isMyMsg ? styles.myMessageBubble : styles.partnerMessageBubble]}>
-                      <Text style={styles.bubbleText}>{item.text}</Text>
-                      <Text style={[styles.bubbleTimeText, isMyMsg ? { color: '#636366' } : { color: '#8E8E93' }]}>
-                        {formatChatTime(item.createdAt)}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              }}
+              renderItem={({ item }) => (
+                <MessageBubble item={item} currentUserId={auth.currentUser?.uid} />
+              )}
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
             />
 
@@ -258,37 +210,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
   mainHeaderStyle: { paddingHorizontal: 20, paddingBottom: 12 },
   mainHeaderTitle: { fontSize: 26, fontWeight: '900' },
-
-  // Hộp thư tổng
-  chatGroupRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 14, borderRadius: 16, marginHorizontal: 16, marginBottom: 12, borderWidth: 1.5, borderColor: '#000' },
-  groupAvatar: { width: 52, height: 52, borderRadius: 12, borderWidth: 1.5, borderColor: '#000' },
-  groupInfoBlock: { flex: 1, marginLeft: 12, justifyContent: 'center' },
-  groupMetaTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  groupTitleText: { fontSize: 15, fontWeight: '850', color: '#000', flex: 1, paddingRight: 8 },
-  listTimeText: { fontSize: 11, fontWeight: '700', color: '#8E8E93' },
-  groupSubText: { fontSize: 13, fontWeight: '600', color: '#636366', flex: 1, paddingRight: 5 },
-  deleteListBtn: { paddingLeft: 10, paddingVertical: 10 },
-
-  // 🌟 STYLE CHẤM ĐỎ THÔNG BÁO TIN MỚI NHƯ MESSENGER
-  unreadDotBadge: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF3B30', marginRight: 4 },
-
-  // Header phòng chat
   roomHeaderRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', height: 60, paddingHorizontal: 6, borderBottomWidth: 1.5, borderColor: '#000' },
   roomBackBtn: { width: 40, height: '100%', justifyContent: 'center', alignItems: 'center' },
   roomHeaderCenterInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 4 },
   roomHeaderAvatar: { width: 38, height: 38, borderRadius: 10, borderWidth: 1, borderColor: '#000', marginRight: 10 },
   roomTitleText: { fontSize: 15, fontWeight: '900', color: '#000' },
   roomSubtitleText: { fontSize: 11, fontWeight: '600', color: '#8E8E93', marginTop: 1 },
-
-  // Bong bóng tin nhắn
-  messageBubbleRow: { flexDirection: 'row', marginBottom: 10, paddingHorizontal: 16, width: '100%' },
-  baseBubble: { maxWidth: '78%', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 16, borderWidth: 1.5, borderColor: '#000', minWidth: 72 },
-  myMessageBubble: { backgroundColor: '#FFF200', borderTopRightRadius: 4 },
-  partnerMessageBubble: { backgroundColor: '#FFF', borderTopLeftRadius: 4 },
-  bubbleText: { fontSize: 14, fontWeight: '600', color: '#000', lineHeight: 19 },
-  bubbleTimeText: { fontSize: 9, fontWeight: '700', textAlign: 'right', marginTop: 3, marginBottom: -2 },
-
-  // Thanh nhập liệu gầm đáy
   inputContainerBar: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1.5, borderColor: '#000', backgroundColor: '#FFF', alignItems: 'center' },
   chatBarTextInput: { flex: 1, backgroundColor: '#F2F2F7', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1.5, borderColor: '#000', fontSize: 14, fontWeight: '600', color: '#000', maxHeight: 80 },
   sendIconBtn: { width: 38, height: 38, backgroundColor: '#FFF200', borderRadius: 19, justifyContent: 'center', alignItems: 'center', marginLeft: 8, borderWidth: 1.5, borderColor: '#000' }

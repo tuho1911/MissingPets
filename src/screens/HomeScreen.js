@@ -1,28 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  Image,
-  FlatList,
-  Dimensions,
-  ActivityIndicator,
-  Platform,
-  StatusBar,
-  Modal,
-  ScrollView,
-  SafeAreaView
+  View, Text, StyleSheet, TextInput, TouchableOpacity, Image, FlatList,
+  ActivityIndicator, Platform, StatusBar, Modal, ScrollView, SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 
-import { db } from '../config/firebaseConfig';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../config/firebaseConfig'; // 🌟 ĐÃ CẬP NHẬT: Thêm cục auth bảo quyền hệ thống
+import { collection, query, orderBy, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore'; // 🌟 ĐÃ CẬP NHẬT: Thêm bộ ba doc, getDoc, setDoc
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 2;
+// Import 2 Component dùng chung vừa tạo tinh gọn
+import PetCard from '../components/PetCard';
+import CustomChip from '../components/CustomChip';
 
 const POPULAR_BREEDS = [
   'Mèo Anh lông ngắn', 'Mèo Anh lông dài', 'Mèo Ba Tư', 'Mèo Xiêm', 'Mèo Mướp', 'Mèo Tam Thể',
@@ -48,15 +37,14 @@ export default function HomeScreen({ navigation }) {
   const [pets, setPets] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // --- TRẠNG THÁI CHO BỘ LỌC NÂNG CAO ---
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [modalStep, setModalStep] = useState('main');
   const [subSearchText, setSubSearchText] = useState('');
 
   const [advCategory, setAdvCategory] = useState('Tất cả');
-  const [advPetType, setAdvPetType] = useState('Tất cả'); // Tất cả | Cat | Dog
+  const [advPetType, setAdvPetType] = useState('Tất cả'); 
   const [advBreed, setAdvBreed] = useState('Tất cả');
-  const [advSex, setAdvSex] = useState('Tất cả'); // Tất cả | male | female
+  const [advSex, setAdvSex] = useState('Tất cả'); 
   const [advLocation, setAdvLocation] = useState('');
 
   const [userLocation, setUserLocation] = useState({
@@ -64,6 +52,37 @@ export default function HomeScreen({ navigation }) {
     longitude: 107.2394,
     addressName: 'Đang xác định vị trí...'
   });
+
+  // 🌟 THÊM MỚI: Tự động rà soát dữ liệu người dùng khi vừa đăng nhập vào ứng dụng
+  useEffect(() => {
+    const checkAndCreateUserProfile = async () => {
+      try {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          const userRef = doc(db, 'users', currentUser.uid);
+          const userSnap = await getDoc(userRef);
+
+          // Nếu trên Firestore trống trơn (User chưa từng có hồ sơ)
+          if (!userSnap.exists()) {
+            await setDoc(userRef, {
+              uid: currentUser.uid,
+              fullName: currentUser.displayName || 'Người dùng Google',
+              email: currentUser.email || '',
+              phone: currentUser.phoneNumber || '',
+              createdAt: new Date()
+            });
+            console.log("🔥 Đã bổ sung thành công tài khoản Google này vào Firestore!");
+          } else {
+            console.log("✅ Hồ sơ người dùng này đã nằm sẵn trên Firestore rồi bồ.");
+          }
+        }
+      } catch (error) {
+        console.log("Lỗi tự động đồng bộ user profile:", error);
+      }
+    };
+
+    checkAndCreateUserProfile();
+  }, []); // Chỉ chạy đúng 1 lần duy nhất khi đặt chân tới HomeScreen
 
   useEffect(() => {
     const getLiveLocation = async () => {
@@ -101,12 +120,12 @@ export default function HomeScreen({ navigation }) {
         postsList.push({
           id: doc.id,
           title: data.title || 'Thú cưng ẩn danh',
-          type: data.type || 'missing', // missing | found
+          type: data.type || 'missing', 
           location: data.location || 'Không rõ vị trí',
           imageUrl: data.imageUrl || 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=400',
           breed: data.breed || 'Không rõ giống',
-          petType: data.petType || 'Cat', // Cat | Dog
-          sex: data.sex || 'female', // male | female
+          petType: data.petType || 'Cat', 
+          sex: data.sex || 'female', 
           latitude: data.latitude,
           longitude: data.longitude,
           phone: data.phone || '',
@@ -118,13 +137,12 @@ export default function HomeScreen({ navigation }) {
       setPets(postsList);
       setLoading(false);
     }, (error) => {
-      console.error("Lỗi khi lấy dữ liệu Firestore: ", error);
+      console.error("Lỗi dữ liệu Firestore: ", error);
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // HỆ THỐNG ĐIỀU PHỐI BỘ LỌC
   const filteredPets = pets.filter(pet => {
     const isNotClosed = pet.type !== 'closed';
     const currentDistance = calculateDistance(userLocation.latitude, userLocation.longitude, pet.latitude, pet.longitude);
@@ -135,7 +153,6 @@ export default function HomeScreen({ navigation }) {
       pet.breed.toLowerCase().includes(search.toLowerCase()) ||
       pet.location.toLowerCase().includes(search.toLowerCase());
 
-    // Đã đồng bộ mapping trường 'type' của DB sang Tiếng Việt
     let categoryMap = 'Tất cả';
     if (pet.type === 'missing') categoryMap = 'Bị lạc';
     if (pet.type === 'found') categoryMap = 'Tìm thấy';
@@ -147,7 +164,6 @@ export default function HomeScreen({ navigation }) {
       matchesRadius = currentDistance <= radiusLimit;
     }
 
-    // Lọc nâng cao theo đúng cấu hình tiếng Anh của Firestore
     const matchesAdvCategory = advCategory === 'Tất cả' || categoryMap === advCategory;
     const matchesAdvPetType = advPetType === 'Tất cả' || pet.petType === advPetType;
     const matchesAdvBreed = advBreed === 'Tất cả' || pet.breed.toLowerCase() === advBreed.toLowerCase();
@@ -172,43 +188,6 @@ export default function HomeScreen({ navigation }) {
     setActiveCategory('Tất cả');
   };
 
-  const renderPetCard = ({ item }) => {
-    let badgeBg = '#FFF200';
-    let statusText = 'TÌM THẤY';
-    if (item.type === 'missing') { badgeBg = '#FF3B30'; statusText = 'BỊ LẠC'; }
-
-    return (
-      <TouchableOpacity style={styles.card} activeOpacity={0.9}
-        onPress={() => navigation.navigate('Detail', { post: item })}>
-        <View style={[styles.badge, { backgroundColor: badgeBg }]}>
-          <Text style={[styles.badgeText, item.type === 'missing' && { color: '#FFF' }]}>
-            {statusText}
-          </Text>
-        </View>
-
-        <Image source={{ uri: item.imageUrl }} style={styles.petImage} />
-
-        <View style={styles.cardInfo}>
-          <Text style={styles.petName} numberOfLines={1}>{item.title}</Text>
-          {/* Đã đồng bộ dịch giới tính sang Tiếng Việt khi hiển thị */}
-          <Text style={styles.petBreed} numberOfLines={1}>
-            Giống: {item.breed} ({item.sex === 'female' ? 'Cái' : 'Đực'})
-          </Text>
-
-          <View style={styles.metaRow}>
-            <Ionicons name="location-outline" size={13} color="#636366" />
-            <Text style={styles.petLoc} numberOfLines={1}>{item.location}</Text>
-          </View>
-
-          <View style={styles.metaRow}>
-            <Ionicons name="navigate-outline" size={13} color="#9BA300" />
-            <Text style={styles.distanceText}>Cách bạn: {item.computedDistance.toFixed(1)} km</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
   return (
     <View style={styles.container}>
       {loading ? (
@@ -219,7 +198,9 @@ export default function HomeScreen({ navigation }) {
       ) : (
         <FlatList
           data={filteredPets}
-          renderItem={renderPetCard}
+          renderItem={({ item }) => (
+            <PetCard item={item} onPress={() => navigation.navigate('Detail', { post: item })} />
+          )}
           keyExtractor={(item) => item.id}
           numColumns={2}
           columnWrapperStyle={styles.rowStyle}
@@ -228,6 +209,7 @@ export default function HomeScreen({ navigation }) {
 
           ListHeaderComponent={
             <View>
+              {/* Header màu vàng đặc trưng */}
               <View style={styles.yellowHeader}>
                 <View style={styles.headerTopRow}>
                   <View>
@@ -263,28 +245,32 @@ export default function HomeScreen({ navigation }) {
                 </View>
               </View>
 
+              {/* Dàn nút lọc khoảng cách rút gọn bằng Component CustomChip */}
               <Text style={styles.subSectionTitle}>Phạm vi tìm kiếm gần bạn</Text>
               <View style={styles.radiusContainer}>
                 {['Tất cả', '2km', '5km', '10km', '20km'].map((radius) => (
-                  <TouchableOpacity
+                  <CustomChip
                     key={radius}
+                    label={radius}
+                    isActive={selectedRadius === radius}
+                    variant="olive"
+                    style={{ minWidth: 64, paddingHorizontal: 0, paddingVertical: 8, borderRadius: 20 }}
                     onPress={() => setSelectedRadius(radius)}
-                    style={[styles.radiusChip, selectedRadius === radius && styles.activeRadiusChip]}
-                  >
-                    <Text style={[styles.radiusText, selectedRadius === radius && styles.activeRadiusText]}>{radius}</Text>
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
 
+              {/* Dàn nút lọc Danh mục chính */}
               <View style={styles.categoryContainer}>
                 {['Tất cả', 'Bị lạc', 'Tìm thấy'].map((category) => (
-                  <TouchableOpacity
+                  <CustomChip
                     key={category}
+                    label={category}
+                    isActive={activeCategory === category}
+                    variant="yellow"
+                    style={{ marginRight: 10 }}
                     onPress={() => setActiveCategory(category)}
-                    style={[styles.categoryChip, activeCategory === category && styles.activeCategoryChip]}
-                  >
-                    <Text style={[styles.categoryText, activeCategory === category && styles.activeCategoryText]}>{category}</Text>
-                  </TouchableOpacity>
+                  />
                 ))}
               </View>
 
@@ -318,21 +304,21 @@ export default function HomeScreen({ navigation }) {
               </View>
 
               <ScrollView style={styles.modalScrollBody} showsVerticalScrollIndicator={false}>
-                {/* Trạng thái tin (Category) */}
+                {/* Lọc Category trong Modal */}
                 <Text style={styles.modalLabel}>Category</Text>
                 <View style={styles.advFilterRow}>
                   {['Tất cả', 'Bị lạc', 'Tìm thấy'].map((cat) => (
-                    <TouchableOpacity
+                    <CustomChip
                       key={cat}
+                      label={cat}
+                      isActive={advCategory === cat}
+                      variant="gray"
                       onPress={() => setAdvCategory(cat)}
-                      style={[styles.advGridChip, advCategory === cat && styles.advActiveGridChip]}
-                    >
-                      <Text style={[styles.advGridChipText, advCategory === cat && styles.advActiveGridChipText]}>{cat}</Text>
-                    </TouchableOpacity>
+                    />
                   ))}
                 </View>
 
-                {/* Khối chọn Loài (Type) - ĐÃ ĐỒNG BỘ TIẾNG ANH CHO DB, TIẾNG VIỆT CHO UI */}
+                {/* Khối chọn Loài (Type) */}
                 <Text style={styles.modalLabel}>Loài</Text>
                 <View style={styles.advFilterRow}>
                   {[
@@ -340,13 +326,13 @@ export default function HomeScreen({ navigation }) {
                     { label: 'Chó', value: 'Dog' },
                     { label: 'Mèo', value: 'Cat' }
                   ].map((item) => (
-                    <TouchableOpacity
+                    <CustomChip
                       key={item.value}
+                      label={item.label}
+                      isActive={advPetType === item.value}
+                      variant="gray"
                       onPress={() => setAdvPetType(item.value)}
-                      style={[styles.advGridChip, advPetType === item.value && styles.advActiveGridChip]}
-                    >
-                      <Text style={[styles.advGridChipText, advPetType === item.value && styles.advActiveGridChipText]}>{item.label}</Text>
-                    </TouchableOpacity>
+                    />
                   ))}
                 </View>
 
@@ -363,7 +349,7 @@ export default function HomeScreen({ navigation }) {
                   ) : <Ionicons name="chevron-forward" size={18} color="#8E8E93" />}
                 </TouchableOpacity>
 
-                {/* Khối chọn Giới tính (Sex) - ĐÃ ĐỒNG BỘ TIẾNG ANH CHO DB, TIẾNG VIỆT CHO UI */}
+                {/* Khối chọn Giới tính */}
                 <Text style={styles.modalLabel}>Giới tính</Text>
                 <View style={styles.advFilterRow}>
                   {[
@@ -371,13 +357,13 @@ export default function HomeScreen({ navigation }) {
                     { label: 'Đực', value: 'male' },
                     { label: 'Cái', value: 'female' }
                   ].map((item) => (
-                    <TouchableOpacity
+                    <CustomChip
                       key={item.value}
+                      label={item.label}
+                      isActive={advSex === item.value}
+                      variant="gray"
                       onPress={() => setAdvSex(item.value)}
-                      style={[styles.advGridChip, advSex === item.value && styles.advActiveGridChip]}
-                    >
-                      <Text style={[styles.advGridChipText, advSex === item.value && styles.advActiveGridChipText]}>{item.label}</Text>
-                    </TouchableOpacity>
+                    />
                   ))}
                 </View>
 
@@ -491,29 +477,11 @@ const styles = StyleSheet.create({
   filterIconButton: { paddingLeft: 10, borderLeftWidth: 1.5, borderLeftColor: '#E5E5EA', height: 24, justifyContent: 'center' },
   subSectionTitle: { fontSize: 13, fontWeight: '800', color: '#000000', marginLeft: 16, marginTop: 18, marginBottom: 8 },
   radiusContainer: { flexDirection: 'row', paddingHorizontal: 16, justifyContent: 'space-between', marginBottom: 6 },
-  radiusChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#E5E5EA', minWidth: 64, alignItems: 'center' },
-  activeRadiusChip: { backgroundColor: '#9BA300', borderColor: '#000000' },
-  radiusText: { fontSize: 12, fontWeight: '700', color: '#636366' },
-  activeRadiusText: { color: '#FFFFFF' },
   categoryContainer: { flexDirection: 'row', paddingHorizontal: 16, marginTop: 14, marginBottom: 10 },
-  categoryChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#E5E5EA', marginRight: 10 },
-  activeCategoryChip: { backgroundColor: '#FFF200', borderColor: '#000000' },
-  categoryText: { fontSize: 13, fontWeight: '700', color: '#636366' },
-  activeCategoryText: { color: '#000000' },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: 16, marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '900', color: '#000000' },
   resultsCount: { fontSize: 12, fontWeight: '600', color: '#8E8E93' },
   rowStyle: { justifyContent: 'space-between', paddingHorizontal: 16 },
-  card: { width: CARD_WIDTH, backgroundColor: '#FFFFFF', borderRadius: 18, marginBottom: 16, overflow: 'hidden', borderWidth: 1.5, borderColor: '#000000', position: 'relative' },
-  badge: { position: 'absolute', top: 10, left: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#000000', zIndex: 10 },
-  badgeText: { fontSize: 9, fontWeight: '900', color: '#000000', letterSpacing: 0.5 },
-  petImage: { width: '100%', height: 130, resizeMode: 'cover' },
-  cardInfo: { padding: 10 },
-  petName: { fontSize: 14, fontWeight: '900', color: '#000000', marginBottom: 2 },
-  petBreed: { fontSize: 11, fontWeight: '600', color: '#636366', marginBottom: 6 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 3 },
-  petLoc: { fontSize: 11, color: '#636366', fontWeight: '600', marginLeft: 4, flex: 1 },
-  distanceText: { fontSize: 11, color: '#000000', fontWeight: '700', marginLeft: 4 },
 
   modalContainer: { flex: 1, backgroundColor: '#FFFFFF' },
   modalHeader: {
@@ -543,19 +511,6 @@ const styles = StyleSheet.create({
   },
   selectorRowText: { fontSize: 15, color: '#A9A9A9', fontWeight: '600' },
   advFilterRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  advGridChip: {
-    flex: 0.31,
-    backgroundColor: '#F2F2F7',
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
-  advActiveGridChip: { backgroundColor: '#FFF200', borderColor: '#000000' },
-  advGridChipText: { fontSize: 14, fontWeight: '700', color: '#636366' },
-  advActiveGridChipText: { color: '#000000' },
   locationInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
