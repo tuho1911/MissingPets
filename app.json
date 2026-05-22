@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "MissingPets",
-    "slug": "MissingPets",
+    "name": "Find Frodo",
+    "slug": "missimgpets",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -24,6 +24,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "95e25497-4f14-405e-9b04-e67d56810a81"
+      }
+    },
+    "owner": "gb01"
   }
 }

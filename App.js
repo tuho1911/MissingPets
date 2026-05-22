@@ -5,11 +5,11 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Platform, View, ActivityIndicator } from 'react-native';
-import * as Location from 'expo-location'; // Thêm gói này để lấy vị trí hiện tại của bồ
+import { Platform, View, ActivityIndicator, Text } from 'react-native';
+import * as Location from 'expo-location'; 
 
 // Import các cấu hình kết nối Firebase
-import { collection, query, orderBy, onSnapshot, doc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, where } from 'firebase/firestore';
 import { db, auth } from './src/config/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -38,23 +38,53 @@ const MyTheme = {
 
 // --- CÔNG THỨC TOÁN HỌC HAVERSINE: ĐO KHOẢNG CÁCH GIỮA 2 TỌA ĐỘ GPS ---
 function calculateDistance(lat1, lon1, lat2, lon2) {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return 999; // Thiếu tọa độ thì cho ra xa để loại bỏ
-  const R = 6371; // Bán kính Trái Đất tính bằng km
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 999; 
+  const R = 6371; 
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Trả về khoảng cách chính xác theo đơn vị km
+  return R * c; 
 }
 
+// ==================== THANH ĐIỀU HƯỚNG GẦM ĐÁY (BOTTOM TAB) ====================
 function MainTabNavigator() {
   const insets = useSafeAreaInsets();
+  // 🌟 KHỞI TẠO VÀ LẮNG NGHE CHẤM ĐỎ NGAY TẠI ĐÂY ĐỂ ĐÚNG PHẠM VI BIẾN
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+
+    const chatsRef = collection(db, 'chats');
+    const q = query(chatsRef, where('users', 'array-contains', uid));
+
+    const unsubscribeUnread = onSnapshot(q, (snapshot) => {
+      let count = 0;
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const isSender = uid === data.users[0];
+        const isHidden = isSender ? data.hideFromSender : data.hideFromReceiver;
+
+        // Chỉ đếm khi tin nhắn đó chưa đọc, mình không phải người gửi cuối và cuộc chat không bị xóa ẩn
+        if (data.unread && data.lastSenderId !== uid && !isHidden) {
+          count++;
+        }
+      });
+      setUnreadCount(count);
+    });
+
+    return () => unsubscribeUnread();
+  }, []);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
           if (route.name === 'HomeTab') iconName = focused ? 'paw' : 'paw-outline';
@@ -78,12 +108,21 @@ function MainTabNavigator() {
     >
       <Tab.Screen name="HomeTab" component={HomeScreen} options={{ tabBarLabel: 'Trang chủ' }} />
       <Tab.Screen name="PostTab" component={PostScreen} options={{ tabBarLabel: 'Đăng tin' }} />
-      <Tab.Screen name="ChatTab" component={ChatScreen} options={{ tabBarLabel: 'Tin nhắn' }} />
+      <Tab.Screen
+        name="ChatTab"
+        component={ChatScreen}
+        options={{
+          tabBarLabel: 'Tin nhắn',
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined, 
+          tabBarBadgeStyle: { backgroundColor: '#FF3B30', color: '#FFF', fontSize: 10, fontWeight: 'bold' } 
+        }}
+      />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ tabBarLabel: 'Settings' }} />
     </Tab.Navigator>
   );
 }
 
+// ==================== THỰC THỂ KHỞI CHẠY CHÍNH ĐẦU APP ====================
 export default function App() {
   const [user, setUser] = useState(null);
   const [initializing, setInitializing] = useState(true);
@@ -129,34 +168,27 @@ export default function App() {
         if (change.type === 'added') {
           const postData = change.doc.data();
 
-          // Kiểm tra xem bài có hợp lệ và được tạo sau khi bồ mở app hay không
           if (
             postData.userId !== user.uid &&
             postData.createdAt?.toDate &&
             postData.createdAt.toDate() > appOpenTime
           ) {
-
-            // LỌC CHỐNG LÀM PHIỀN: Nếu bồ chọn "Tắt" nhận cảnh báo khu vực thì bỏ qua luôn
             if (userSettings.alertRadius === 'Tắt') return;
 
-            // Quy đổi chữ cấu hình bán kính thành con số km cụ thể để so sánh
             let maxRadiusKm = 1.0;
             if (userSettings.alertRadius === '500m') maxRadiusKm = 0.5;
             if (userSettings.alertRadius === '1km') maxRadiusKm = 1.0;
             if (userSettings.alertRadius === '2km') maxRadiusKm = 2.0;
 
             try {
-              // Lấy tọa độ GPS hiện tại của chiếc điện thoại bồ đang cầm test
               const currentLoc = await Location.getCurrentPositionAsync({});
               const myLat = currentLoc.coords.latitude;
               const myLon = currentLoc.coords.longitude;
 
-              // Tính toán khoảng cách thực tế từ bồ tới vị trí pet lạc/tìm thấy
               const distance = calculateDistance(myLat, myLon, postData.latitude, postData.longitude);
 
               console.log(`LOG: Phát hiện bài đăng mới cách bồ ${distance.toFixed(2)} km. Hạn mức bồ chọn là ${maxRadiusKm} km.`);
 
-              // CHỈ THÔNG BÁO khi khoảng cách đo được nhỏ hơn hoặc bằng bán kính bồ đã cấu hình!
               if (distance <= maxRadiusKm) {
                 const vnType = postData.type === 'missing' ? 'bị lạc 🚨' : 'được tìm thấy ✨';
                 const vnPet = postData.petType === 'Cat' ? 'Mèo' : 'Chó';
@@ -169,19 +201,19 @@ export default function App() {
             } catch (err) {
               console.log("Không lấy được vị trí máy nhận để so khoảng cách: ", err);
             }
-
           }
         }
       });
     });
 
     return () => unsubscribePosts();
-  }, [user, userSettings]); // Lắng nghe lại mỗi khi cấu hình bán kính thay đổi
+  }, [user, userSettings]);
 
   if (initializing) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FA' }}>
         <ActivityIndicator size="large" color="#000000" />
+        <Text style={{ marginTop: 10, fontSize: 14 }}>Đang kiểm tra đăng nhập...</Text>
       </View>
     );
   }

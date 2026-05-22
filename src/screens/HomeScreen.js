@@ -1,25 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  Image, 
-  FlatList, 
-  Dimensions, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  FlatList,
+  Dimensions,
   ActivityIndicator,
-  Platform,  
+  Platform,
   StatusBar,
-  Modal, 
+  Modal,
   ScrollView,
-  SafeAreaView 
+  SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location'; 
+import * as Location from 'expo-location';
 
 import { db } from '../config/firebaseConfig';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'; 
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
@@ -31,33 +31,33 @@ const POPULAR_BREEDS = [
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
-  const R = 6371; 
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; 
+  return R * c;
 };
 
 export default function HomeScreen({ navigation }) {
-  const [search, setSearch] = useState(''); 
-  const [activeCategory, setActiveCategory] = useState('Tất cả'); 
-  const [selectedRadius, setSelectedRadius] = useState('Tất cả'); 
-  const [pets, setPets] = useState([]); 
-  const [loading, setLoading] = useState(true); 
+  const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('Tất cả');
+  const [selectedRadius, setSelectedRadius] = useState('Tất cả');
+  const [pets, setPets] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // --- TRẠNG THÁI CHO BỘ LỌC NÂNG CAO ---
-  const [isModalVisible, setIsModalVisible] = useState(false); 
-  const [modalStep, setModalStep] = useState('main'); 
-  const [subSearchText, setSubSearchText] = useState(''); 
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [modalStep, setModalStep] = useState('main');
+  const [subSearchText, setSubSearchText] = useState('');
 
-  const [advCategory, setAdvCategory] = useState('Tất cả'); 
+  const [advCategory, setAdvCategory] = useState('Tất cả');
   const [advPetType, setAdvPetType] = useState('Tất cả'); // Tất cả | Cat | Dog
-  const [advBreed, setAdvBreed] = useState('Tất cả'); 
+  const [advBreed, setAdvBreed] = useState('Tất cả');
   const [advSex, setAdvSex] = useState('Tất cả'); // Tất cả | male | female
-  const [advLocation, setAdvLocation] = useState(''); 
+  const [advLocation, setAdvLocation] = useState('');
 
   const [userLocation, setUserLocation] = useState({
     latitude: 10.9322,
@@ -91,11 +91,11 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   useEffect(() => {
-    const postsCollectionRef = collection(db, 'posts'); 
+    const postsCollectionRef = collection(db, 'posts');
     const q = query(postsCollectionRef, orderBy('createdAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const postsList = []; 
+      const postsList = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         postsList.push({
@@ -103,19 +103,19 @@ export default function HomeScreen({ navigation }) {
           title: data.title || 'Thú cưng ẩn danh',
           type: data.type || 'missing', // missing | found
           location: data.location || 'Không rõ vị trí',
-          imageUrl: data.imageUrl || 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=400', 
+          imageUrl: data.imageUrl || 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=400',
           breed: data.breed || 'Không rõ giống',
           petType: data.petType || 'Cat', // Cat | Dog
           sex: data.sex || 'female', // male | female
           latitude: data.latitude,
           longitude: data.longitude,
-          phone: data.phone || '', 
+          phone: data.phone || '',
           description: data.description || 'Không có mô tả chi tiết.',
           createdAt: data.createdAt,
           userId: data.userId || '',
         });
       });
-      setPets(postsList); 
+      setPets(postsList);
       setLoading(false);
     }, (error) => {
       console.error("Lỗi khi lấy dữ liệu Firestore: ", error);
@@ -128,13 +128,13 @@ export default function HomeScreen({ navigation }) {
   const filteredPets = pets.filter(pet => {
     const isNotClosed = pet.type !== 'closed';
     const currentDistance = calculateDistance(userLocation.latitude, userLocation.longitude, pet.latitude, pet.longitude);
-    pet.computedDistance = currentDistance; 
+    pet.computedDistance = currentDistance;
 
-    const matchesSearch = search === '' || 
-                          pet.title.toLowerCase().includes(search.toLowerCase()) || 
-                          pet.breed.toLowerCase().includes(search.toLowerCase()) ||
-                          pet.location.toLowerCase().includes(search.toLowerCase());
-    
+    const matchesSearch = search === '' ||
+      pet.title.toLowerCase().includes(search.toLowerCase()) ||
+      pet.breed.toLowerCase().includes(search.toLowerCase()) ||
+      pet.location.toLowerCase().includes(search.toLowerCase());
+
     // Đã đồng bộ mapping trường 'type' của DB sang Tiếng Việt
     let categoryMap = 'Tất cả';
     if (pet.type === 'missing') categoryMap = 'Bị lạc';
@@ -143,7 +143,7 @@ export default function HomeScreen({ navigation }) {
 
     let matchesRadius = true;
     if (selectedRadius !== 'Tất cả') {
-      const radiusLimit = parseInt(selectedRadius); 
+      const radiusLimit = parseInt(selectedRadius);
       matchesRadius = currentDistance <= radiusLimit;
     }
 
@@ -173,13 +173,13 @@ export default function HomeScreen({ navigation }) {
   };
 
   const renderPetCard = ({ item }) => {
-    let badgeBg = '#FFF200'; 
+    let badgeBg = '#FFF200';
     let statusText = 'TÌM THẤY';
     if (item.type === 'missing') { badgeBg = '#FF3B30'; statusText = 'BỊ LẠC'; }
 
     return (
-      <TouchableOpacity style={styles.card} activeOpacity={0.9} 
-      onPress={() => navigation.navigate('Detail', { post: item })}>
+      <TouchableOpacity style={styles.card} activeOpacity={0.9}
+        onPress={() => navigation.navigate('Detail', { post: item })}>
         <View style={[styles.badge, { backgroundColor: badgeBg }]}>
           <Text style={[styles.badgeText, item.type === 'missing' && { color: '#FFF' }]}>
             {statusText}
@@ -194,7 +194,7 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.petBreed} numberOfLines={1}>
             Giống: {item.breed} ({item.sex === 'female' ? 'Cái' : 'Đực'})
           </Text>
-          
+
           <View style={styles.metaRow}>
             <Ionicons name="location-outline" size={13} color="#636366" />
             <Text style={styles.petLoc} numberOfLines={1}>{item.location}</Text>
@@ -225,7 +225,7 @@ export default function HomeScreen({ navigation }) {
           columnWrapperStyle={styles.rowStyle}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 30 }}
-          
+
           ListHeaderComponent={
             <View>
               <View style={styles.yellowHeader}>
@@ -234,8 +234,11 @@ export default function HomeScreen({ navigation }) {
                     <Text style={styles.welcomeText}>Vị trí: {userLocation.addressName}</Text>
                     <Text style={styles.headerTitle}>FIND FRODO</Text>
                   </View>
-                  <TouchableOpacity style={styles.avatarButton}>
-                    <Ionicons name="person-outline" size={22} color="#000000" />
+                  <TouchableOpacity
+                    style={styles.avatarButton}
+                    onPress={() => navigation.navigate('ProfileTab', { initialStep: 'details' })}
+                  >
+                    <Ionicons name="person" size={20} color="#1C1C1E" />
                   </TouchableOpacity>
                 </View>
 
@@ -243,12 +246,12 @@ export default function HomeScreen({ navigation }) {
                   <Ionicons name="search-outline" size={20} color="#1C1C1E" style={styles.searchIcon} />
                   <TextInput
                     style={styles.searchInput}
-                    placeholder="Tìm kiếm khu vực hoặc đặc điểm..."
+                    placeholder="Tìm kiếm..."
                     placeholderTextColor="#A9A9A9"
                     value={search}
                     onChangeText={setSearch}
                   />
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.filterIconButton}
                     onPress={() => {
                       setModalStep('main');
@@ -303,7 +306,7 @@ export default function HomeScreen({ navigation }) {
       {/* MODAL TÌM KIẾM NÂNG CAO */}
       <Modal visible={isModalVisible} animationType="slide" transparent={false}>
         <SafeAreaView style={styles.modalContainer}>
-          
+
           {modalStep === 'main' && (
             <View style={{ flex: 1 }}>
               <View style={styles.modalHeader}>
@@ -387,7 +390,7 @@ export default function HomeScreen({ navigation }) {
                     placeholder="Nhập bất kỳ tỉnh thành, quận huyện nào..."
                     placeholderTextColor="#A9A9A9"
                     value={advLocation}
-                    onChangeText={setAdvLocation} 
+                    onChangeText={setAdvLocation}
                   />
                   {advLocation !== '' && (
                     <TouchableOpacity onPress={() => setAdvLocation('')}>
@@ -396,7 +399,7 @@ export default function HomeScreen({ navigation }) {
                   )}
                 </View>
 
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.gpsShortcutBtn}
                   onPress={() => setAdvLocation(userLocation.addressName.replace(' 📍', ''))}
                 >
@@ -473,15 +476,15 @@ const styles = StyleSheet.create({
   welcomeText: { fontSize: 12, fontWeight: '700', color: '#000000', opacity: 0.6 },
   headerTitle: { fontSize: 18, fontWeight: '900', color: '#000000', lineHeight: 24, marginTop: 2 },
   avatarButton: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#000000' },
-  searchWrapper: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#FFFFFF', 
-    height: 52, 
-    borderRadius: 12, 
-    paddingHorizontal: 14, 
-    borderWidth: 2, 
-    borderColor: '#000000' 
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    height: 52,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    borderWidth: 2,
+    borderColor: '#000000'
   },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, color: '#000000', fontSize: 14, fontWeight: '600', height: '100%' },
@@ -489,7 +492,7 @@ const styles = StyleSheet.create({
   subSectionTitle: { fontSize: 13, fontWeight: '800', color: '#000000', marginLeft: 16, marginTop: 18, marginBottom: 8 },
   radiusContainer: { flexDirection: 'row', paddingHorizontal: 16, justifyContent: 'space-between', marginBottom: 6 },
   radiusChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#E5E5EA', minWidth: 64, alignItems: 'center' },
-  activeRadiusChip: { backgroundColor: '#9BA300', borderColor: '#000000' }, 
+  activeRadiusChip: { backgroundColor: '#9BA300', borderColor: '#000000' },
   radiusText: { fontSize: 12, fontWeight: '700', color: '#636366' },
   activeRadiusText: { color: '#FFFFFF' },
   categoryContainer: { flexDirection: 'row', paddingHorizontal: 16, marginTop: 14, marginBottom: 10 },
@@ -590,7 +593,7 @@ const styles = StyleSheet.create({
     flex: 0.66,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#1C1C1E', 
+    backgroundColor: '#1C1C1E',
     justifyContent: 'center',
     alignItems: 'center',
   },

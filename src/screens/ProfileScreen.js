@@ -24,7 +24,7 @@ import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, deleteDo
 import { uploadToCloudinary } from '../config/cloudinaryConfig';
 import { signOut } from 'firebase/auth';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ route, navigation }) {
   // Quản lý luồng màn hình: 'menu' | 'details' | 'my_reports' | 'notifications'
   const [step, setStep] = useState('menu'); 
 
@@ -103,6 +103,21 @@ export default function ProfileScreen() {
 
     return () => unsubscribe();
   }, [step]);
+
+  useEffect(() => {
+    if (route?.params?.initialStep) {
+      setStep(route.params.initialStep); 
+      navigation.setParams({ initialStep: null });
+    }
+  }, [route?.params?.initialStep]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('blur', () => {
+      setStep('menu'); 
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   // Hàm chọn ảnh đại diện từ thiết bị
   const pickAvatar = async () => {
